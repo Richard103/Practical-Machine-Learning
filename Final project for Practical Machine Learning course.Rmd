@@ -1,0 +1,146 @@
+---
+title: "Final project for Practical Machine Learning course"
+author: "Richard Loukota"
+date: "February 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+## Goal of the project
+I will use two models in this project with the sensor data. I will use it to train and test the models.
+Models are:
+
+1) Random Forests
+2) Recursive Partitioning and Regression Trees
+
+## Reproducibility
+
+I set the pseudo-random number generator set.seed at 1221 for the whole project.
+I use the "caret" package available for R and leave all the parameter at default value in this project.
+Different packages are downloaded and installed, such as caret, rattle, rpart and randomForest. These packages must be installed in order to reproduce the results in this analysis. See the code below for ways and syntax to reproduce the results.
+
+```{r echo=FALSE}
+library(caret)
+library(rattle)
+library(rpart)
+library(randomForest)
+```
+
+## Data set
+The inital data cleansing must be done during loading data:
+1) Remove all columns that contain mostly NAs
+2) Remove columns with non-numeric variables
+
+I load the training and testing datasets from url, read them into the memory and check the dimensions:
+
+```{r}
+set.seed(1221)
+
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+
+dim(training)
+dim(testing)
+```
+
+## Cleaning the data
+
+I made following transformations to clean the trainig data set:
+
+I remove NearZeroVariance Variables, useless columns and delete columns with all missing values 
+```{r}
+NZV <- nearZeroVar(training, saveMetrics = TRUE)
+training <- training[, !NZV$nzv]
+
+NZV <- nearZeroVar(testing, saveMetrics = TRUE)
+testing <- testing[, !NZV$nzv]
+
+Cols <- grep("name|timestamp|window|X", colnames(training), value=F) 
+training <- training[,-Cols]
+
+trainingSet <-training[,colSums(is.na(training)) == 0]
+testingSet <-testing[,colSums(is.na(testing)) == 0]
+
+# training$classe <- as.factor(training$classe)
+# testing$classe <- as.factor(testing$classe)
+
+dim(trainingSet)
+dim(testingSet)
+```
+
+## Cross-validation
+
+To perform the cross-validation I subsample the trainingSet data set randomly without replacement into 2 datasets. I use 70% of the original trainingSet data set like trainig data set and 30% like testing data set. I fit the models on the training data set and test it on the testing data set. Once the most accurate model is choosen, I test it on the original testingSet data set. The outcome variable “classe” is the factor variable. 
+
+```{r}
+partition <- createDataPartition(y=trainingSet$classe, p=0.7, list=FALSE)
+training <- trainingSet[partition, ] 
+testing <- trainingSet[-partition, ]
+```
+
+I check the variable "classe" which contains 5 levels: A, B, C, D, E. I make a plot of that variable to see the frequency of each levels in my training data set and compare one another.
+
+```{r}
+plot(training$classe, col="green", main="Levels of var classe within training data set", xlab="classe", ylab="Frequency")
+```
+
+Each level is within the same order of magnitude of each other. Level A is the most frequent and level D is the least frequent.
+
+## Expected out-of-sample error
+
+The expected out-of-sample error corresponds to the quantity = 1-accuracy in the cross-validation data. Accuracy is the proportion of the number of correctly classified observations over the number of the total sample in the training data set. 
+Expected accuracy is the expected accuracy in the out-of-sample data set (i.e. original testing data set). Thus, the expected value of the out-of-sample error will correspond to the expected number of missclassified observations/total observations in the Test data set, which is the quantity: 1-accuracy found from the cross-validation data set.
+
+
+## Data modeling
+
+To predict the manner in which the user did the exercise I use models:
+1) Decision Tree and 
+2) Random Forest.
+
+### 1) Decision Tree
+
+
+
+```{r}
+modFitDT <- rpart(classe ~ ., method="class", data=training)
+fancyRpartPlot(modFitDT)
+predDT <- predict(modFitDT, testing, type = "class")
+confusionMatrix(predDT, testing$classe)
+
+```
+### 2) Random Forest
+
+```{r}
+modFitRF <- randomForest(classe ~. , method="class", data=training)
+predRF <- predict(modFitRF, testing, type = "class")
+confusionMatrix(predRF, testing$classe)
+```
+
+
+## Results - which prediction model is recommended to use:
+
+The Random Forest algorithm has better results than the Decision Trees. The accuracy for Random Forest model is 0.9946 (95% CI: (0.992, 0.996)). On the other side the Decision Tree model has accuracy 0.7285 (95% CI: (0.717, 0.740)). I decide to choose the Random Forests model for prediction of the manner in which the users did the exercise. The expected out-of-sample error is estimated at 0.005, or 0.5%.
+
+
+## Final step
+
+As the last step I make the prediction applied on the testingSet data set, that was downloaded at the begining of the project. I use the model modFitRF created with Random Forest algorithm.
+
+```{r}
+predictfinal <- predict(modFitRF, testingSet, type="class")
+predictfinal
+```
+
+The end.
+
